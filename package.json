@@ -8,7 +8,7 @@
     "build": "tsc && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
     "lint:ext": "web-ext lint --source-dir dist",
     "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir dist --artifacts-dir artifacts --overwrite-dest",
-    "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir dist --artifacts-dir artifacts --channel unlisted --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
+    "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir dist --artifacts-dir artifacts --channel listed --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
     "release": "semantic-release",
     "test:integration": "vitest run tests/integration"
   },

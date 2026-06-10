@@ -6,8 +6,9 @@ export class BrowserBoost {
   private readonly settingsStore = new SettingsStore();
   private readonly virtualizer = new MessageVirtualizer(() => this.settingsStore.get());
   private observer: MutationObserver | null = null;
-  private intervalId: number | null = null;
+  private scrollListener: (() => void) | null = null;
   private toolbar: HTMLElement | null = null;
+  private initialScanDone = false;
 
   constructor(private readonly adapter: SiteAdapter) {}
 
@@ -19,22 +20,33 @@ export class BrowserBoost {
     this.injectToolbar();
     this.updateToolbar();
 
+    this.observe();
+
     if (settings.enabled) {
-      this.scan();
+      this.initialScan();
     }
 
-    this.observe();
-    this.intervalId = window.setInterval(() => this.scan(), 2000);
+    this.observeScroll();
   }
 
   private observe(): void {
     this.observer?.disconnect();
 
     const root = this.adapter.findConversationRoot();
-    if (!root) return;
+    if (!root) {
+      window.setTimeout(() => this.observe(), 250);
+      return;
+    }
 
-    this.observer = new MutationObserver(() => {
-      window.setTimeout(() => this.scan(), 150);
+    this.observer = new MutationObserver((records) => {
+      const settings = this.settingsStore.get();
+      if (!settings.enabled) return;
+
+      const messages = this.adapter.extractMessagesFromMutation(records);
+      if (messages.length === 0) return;
+
+      this.virtualizer.registerMessages(messages);
+      this.updateToolbar();
     });
 
     this.observer.observe(root, {
@@ -43,13 +55,42 @@ export class BrowserBoost {
     });
   }
 
-  private scan(): void {
-    const settings = this.settingsStore.get();
-    if (!settings.enabled) return;
+  private initialScan(): void {
+    if (this.initialScanDone) return;
 
-    const messages = this.adapter.findMessages();
-    this.virtualizer.registerMessages(messages);
-    this.updateToolbar();
+    const root = this.adapter.findConversationRoot();
+
+    if (!root) {
+      window.setTimeout(() => this.initialScan(), 250);
+      return;
+    }
+
+    this.initialScanDone = true;
+
+    window.setTimeout(() => {
+      const messages = this.adapter.findMessages();
+      this.virtualizer.registerMessages(messages);
+      this.updateToolbar();
+    }, 0);
+  }
+
+  private observeScroll(): void {
+    if (this.scrollListener) {
+      window.removeEventListener('scroll', this.scrollListener, { capture: true });
+    }
+
+    this.scrollListener = () => {
+      const settings = this.settingsStore.get();
+      if (!settings.enabled) return;
+
+      this.virtualizer.scheduleViewportReconcile();
+      this.updateToolbar();
+    };
+
+    window.addEventListener('scroll', this.scrollListener, {
+      passive: true,
+      capture: true,
+    });
   }
 
   private toggleEnabled(): void {
@@ -61,7 +102,9 @@ export class BrowserBoost {
     if (!next.enabled) {
       this.virtualizer.restoreAll();
     } else {
-      this.scan();
+      this.initialScanDone = false;
+      this.initialScan();
+      this.virtualizer.scheduleViewportReconcile();
     }
 
     this.updateToolbar();
@@ -92,7 +135,7 @@ export class BrowserBoost {
     restore.addEventListener('click', () => this.restoreAll());
 
     toolbar.append(status, toggle, restore);
-    document.body.appendChild(toolbar);
+    document.documentElement.appendChild(toolbar);
 
     this.toolbar = toolbar;
   }

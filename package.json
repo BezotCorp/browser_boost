@@ -1,0 +1,13 @@
+{
+  "name": "chatgpt-dom-boost",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local DOM virtualizer for long ChatGPT conversations.",
+  "scripts": {
+    "build": "tsc && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
+    "pack:xpi": "cd dist && zip -r ../chatgpt-dom-boost.xpi ."
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

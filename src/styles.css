@@ -1,44 +1,56 @@
-.cgpt-dom-boost-placeholder {
+.browser-boost-placeholder {
+  display: block;
   box-sizing: border-box;
+  width: min(900px, calc(100% - 32px));
+  min-height: 52px;
   margin: 12px auto;
-  max-width: 900px;
-  min-height: 44px;
   padding: 12px 16px;
-  border: 1px dashed rgba(127, 127, 127, 0.45);
-  border-radius: 10px;
-  opacity: 0.75;
-  font-size: 13px;
+  border: 1px dashed rgba(127, 127, 127, 0.55);
+  border-radius: 12px;
+  background: rgba(127, 127, 127, 0.08);
+  color: inherit;
+  opacity: 0.72;
+  font:
+    13px system-ui,
+    sans-serif;
+  text-align: left;
   cursor: pointer;
-  user-select: none;
 }
 
-.cgpt-dom-boost-placeholder:hover {
+.browser-boost-placeholder:hover {
   opacity: 1;
+  background: rgba(127, 127, 127, 0.14);
 }
 
-.cgpt-dom-boost-toolbar {
+.browser-boost-toolbar {
   position: fixed;
   right: 16px;
   bottom: 16px;
-  z-index: 999999;
+  z-index: 2147483647;
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 7px 9px;
   border-radius: 999px;
-  background: rgba(30, 30, 30, 0.86);
+  background: rgba(24, 24, 27, 0.9);
   color: white;
   font:
     12px system-ui,
     sans-serif;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
 }
 
-.cgpt-dom-boost-toolbar button {
+.browser-boost-toolbar button {
   border: 0;
   border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
+  padding: 5px 9px;
   background: white;
   color: black;
   font: inherit;
+  cursor: pointer;
+}
+
+.browser-boost-toolbar button:hover {
+  filter: brightness(0.92);
 }

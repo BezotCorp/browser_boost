@@ -1,21 +1,36 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT DOM Boost",
-  "version": "0.1.0",
-  "description": "Compacts old ChatGPT messages locally to reduce DOM slowdown.",
+  "name": "BrowserBoost",
+  "version": "0.0.0",
+  "description": "Optimize heavy web applications locally. First target: long ChatGPT conversations.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "chatgpt-dom-boost@bezotcorp.local",
-      "strict_min_version": "109.0"
+      "id": "browserboost@bezotcorp.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
     }
   },
   "permissions": [],
-  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
       "run_at": "document_idle"
     }
   ]

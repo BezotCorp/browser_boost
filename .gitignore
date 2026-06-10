@@ -3,3 +3,6 @@ dist/
 *.xpi
 .env
 .DS_Store
+artifacts/
+test-results/
+coverage/

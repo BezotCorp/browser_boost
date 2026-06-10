@@ -1,24 +1,36 @@
 {
   "manifest_version": 3,
   "name": "BrowserBoost",
-  "version": "0.0.0",
+  "version": "1.0.0-beta.1",
   "description": "Optimize heavy web applications locally. First target: long ChatGPT conversations.",
   "browser_specific_settings": {
     "gecko": {
       "id": "browserboost@bezotcorp.com",
       "strict_min_version": "142.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   },
   "permissions": [],
-  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
       "run_at": "document_idle"
     }
   ]

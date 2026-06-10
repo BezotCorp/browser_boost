@@ -1,12 +1,12 @@
 export type BrowserBoostSettings = {
   enabled: boolean;
-  keepLastMessages: number;
+  viewportBufferScreens: number;
   minMessagesBeforeCompact: number;
 };
 
 const DEFAULT_SETTINGS: BrowserBoostSettings = {
   enabled: true,
-  keepLastMessages: 50,
+  viewportBufferScreens: 2,
   minMessagesBeforeCompact: 80,
 };
 
@@ -20,11 +20,13 @@ export class SettingsStore {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return this.settings;
 
-      const parsed = JSON.parse(raw) as Partial<BrowserBoostSettings>;
+      const parsed = JSON.parse(raw) as Partial<BrowserBoostSettings> & {
+        keepLastMessages?: number;
+      };
 
       this.settings = {
         enabled: parsed.enabled ?? DEFAULT_SETTINGS.enabled,
-        keepLastMessages: parsed.keepLastMessages ?? DEFAULT_SETTINGS.keepLastMessages,
+        viewportBufferScreens: parsed.viewportBufferScreens ?? DEFAULT_SETTINGS.viewportBufferScreens,
         minMessagesBeforeCompact: parsed.minMessagesBeforeCompact ?? DEFAULT_SETTINGS.minMessagesBeforeCompact,
       };
     } catch {

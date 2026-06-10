@@ -1,5 +1,7 @@
 import type { SiteAdapter } from './site_adapter';
 
+const MESSAGE_SELECTOR = '[data-message-author-role]';
+
 export class ChatGptSite implements SiteAdapter {
   readonly name = 'ChatGPT';
 
@@ -12,15 +14,39 @@ export class ChatGptSite implements SiteAdapter {
   }
 
   findMessages(): HTMLElement[] {
-    const messages = [...document.querySelectorAll<HTMLElement>('[data-message-author-role]')];
+    return this.filterMessages([...document.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)]);
+  }
+
+  extractMessagesFromMutation(records: MutationRecord[]): HTMLElement[] {
+    const messages: HTMLElement[] = [];
+
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+
+        if (node.matches(MESSAGE_SELECTOR)) {
+          messages.push(node);
+          continue;
+        }
+
+        messages.push(...node.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
+      }
+    }
+
+    return this.filterMessages(messages);
+  }
+
+  private filterMessages(messages: HTMLElement[]): HTMLElement[] {
+    const seen = new Set<HTMLElement>();
 
     return messages.filter((message) => {
+      if (seen.has(message)) return false;
+      seen.add(message);
+
       if (message.dataset.browserBoostPlaceholder === 'true') return false;
 
-      const rect = message.getBoundingClientRect();
-      const text = message.innerText.trim();
-
-      return rect.width > 0 && rect.height > 0 && text.length > 0;
+      const text = message.textContent?.trim() ?? '';
+      return text.length > 0;
     });
   }
 }

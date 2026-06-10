@@ -1,9 +1,13 @@
 import type { BrowserBoostSettings } from '../settings';
 import type { VirtualizedBlock } from './virtualized_block';
 
+const COMPACT_BATCH_SIZE = 250;
+
 export class MessageVirtualizer {
   private blocks = new Map<HTMLElement, VirtualizedBlock>();
   private nextId = 1;
+  private compactQueue: VirtualizedBlock[] = [];
+  private compactScheduled = false;
 
   constructor(private getSettings: () => BrowserBoostSettings) {}
 
@@ -13,27 +17,17 @@ export class MessageVirtualizer {
       this.blocks.set(message, this.createBlock(message));
     }
 
-    this.compact();
+    this.scheduleCompact();
   }
 
   compact(): void {
-    const settings = this.getSettings();
-    if (!settings.enabled) return;
-
-    const blocks = this.getLiveBlocks();
-
-    if (blocks.length < settings.minMessagesBeforeCompact) return;
-
-    const compactUntil = Math.max(0, blocks.length - settings.keepLastMessages);
-
-    for (let index = 0; index < compactUntil; index++) {
-      const block = blocks[index];
-      if (!block || block.detached) continue;
-      this.detach(block);
-    }
+    this.scheduleCompact();
   }
 
   restoreAll(): void {
+    this.compactQueue = [];
+    this.compactScheduled = false;
+
     for (const block of this.blocks.values()) {
       this.restore(block);
     }
@@ -45,6 +39,47 @@ export class MessageVirtualizer {
 
   countTotal(): number {
     return this.getLiveBlocks().length;
+  }
+
+  private scheduleCompact(): void {
+    const settings = this.getSettings();
+    if (!settings.enabled) return;
+    if (this.compactScheduled) return;
+
+    const blocks = this.getLiveBlocks();
+
+    if (blocks.length < settings.minMessagesBeforeCompact) return;
+
+    const compactUntil = Math.max(0, blocks.length - settings.keepLastMessages);
+
+    this.compactQueue = blocks.slice(0, compactUntil).filter((block) => !block.detached);
+
+    if (this.compactQueue.length === 0) return;
+
+    this.compactScheduled = true;
+    this.runNextCompactBatch();
+  }
+
+  private runNextCompactBatch(): void {
+    const runner = () => {
+      const batch = this.compactQueue.splice(0, COMPACT_BATCH_SIZE);
+
+      for (const block of batch) {
+        this.detach(block);
+      }
+
+      if (this.compactQueue.length > 0) {
+        this.runNextCompactBatch();
+      } else {
+        this.compactScheduled = false;
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 500 });
+    } else {
+      globalThis.setTimeout(runner, 0);
+    }
   }
 
   private createBlock(element: HTMLElement): VirtualizedBlock {

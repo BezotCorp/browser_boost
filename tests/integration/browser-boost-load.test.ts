@@ -19,6 +19,25 @@ class FakeChatGptAdapter implements SiteAdapter {
   findMessages(): HTMLElement[] {
     return [...document.querySelectorAll<HTMLElement>('[data-message-author-role]')];
   }
+
+  extractMessagesFromMutation(records: MutationRecord[]): HTMLElement[] {
+    const messages: HTMLElement[] = [];
+
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+
+        if (node.hasAttribute('data-message-author-role')) {
+          messages.push(node);
+          continue;
+        }
+
+        messages.push(...node.querySelectorAll<HTMLElement>('[data-message-author-role]'));
+      }
+    }
+
+    return messages;
+  }
 }
 
 const HEAVY_CODE_BLOCK = `
@@ -103,6 +122,8 @@ const HEAVY_JSON_BLOCK = JSON.stringify(
 function createLightMessageContent(index: number): HTMLElement {
   const message = document.createElement('article');
   message.dataset.messageAuthorRole = index % 2 === 0 ? 'user' : 'assistant';
+  message.dataset.testTop = String(index * 100);
+  message.dataset.testHeight = '80';
   message.textContent = `Message ${index} `.repeat(20);
   return message;
 }
@@ -110,6 +131,8 @@ function createLightMessageContent(index: number): HTMLElement {
 function createHeavyMessageContent(index: number): HTMLElement {
   const wrapper = document.createElement('article');
   wrapper.dataset.messageAuthorRole = index % 2 === 0 ? 'user' : 'assistant';
+  wrapper.dataset.testTop = String(index * 900);
+  wrapper.dataset.testHeight = '800';
 
   const title = document.createElement('h2');
   title.textContent = `Message ${index} — heavy ChatGPT-like payload`;
@@ -159,6 +182,21 @@ describe('BrowserBoost load integration', () => {
     window.localStorage.clear();
     document.body.innerHTML = '';
 
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 800,
+    });
+
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      value: 0,
+    });
+
+    Object.defineProperty(document.documentElement, 'scrollTop', {
+      configurable: true,
+      value: 0,
+    });
+
     Object.defineProperty(HTMLElement.prototype, 'innerText', {
       configurable: true,
       get() {
@@ -167,17 +205,19 @@ describe('BrowserBoost load integration', () => {
     });
 
     HTMLElement.prototype.getBoundingClientRect = function () {
+      const testTop = Number(this.dataset.testTop ?? '0');
+      const explicitHeight = Number(this.dataset.testHeight ?? '0');
       const textLength = (this.textContent ?? '').length;
-      const height = Math.max(80, Math.min(2400, Math.ceil(textLength / 18)));
+      const height = explicitHeight || Math.max(80, Math.min(2400, Math.ceil(textLength / 18)));
 
       return {
         x: 0,
-        y: 0,
+        y: testTop,
         width: 800,
         height,
-        top: 0,
+        top: testTop,
         right: 800,
-        bottom: height,
+        bottom: testTop + height,
         left: 0,
         toJSON() {
           return {};

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BrowserBoost",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Optimize heavy web applications locally. First target: long ChatGPT conversations.",
   "browser_specific_settings": {
     "gecko": {

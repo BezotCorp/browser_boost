@@ -1,6 +1,6 @@
 {
   "name": "browser_boost",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": false,
   "description": "BrowserBoost optimizes heavy web applications locally.",
   "type": "module",

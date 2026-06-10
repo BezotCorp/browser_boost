@@ -1,0 +1,52 @@
+name: Sign Firefox
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign-firefox:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Lint extension
+        run: pnpm lint:ext
+
+      - name: Run integration tests
+        run: pnpm test:integration
+
+      - name: Sign Firefox extension
+        run: pnpm release:firefox
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserboost-firefox-signed
+          path: artifacts/*

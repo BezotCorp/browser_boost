@@ -9,7 +9,8 @@
     "lint:ext": "web-ext lint --source-dir dist",
     "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir dist --artifacts-dir artifacts --overwrite-dest",
     "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir dist --artifacts-dir artifacts --channel unlisted --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "test:integration": "vitest run tests/integration"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
@@ -19,8 +20,10 @@
     "@semantic-release/github": "^12.0.8",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "conventional-changelog-conventionalcommits": "^9.3.1",
+    "jsdom": "^29.1.1",
     "semantic-release": "^25.0.3",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
     "web-ext": "^10.3.0"
   }
 }

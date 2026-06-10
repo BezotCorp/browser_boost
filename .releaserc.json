@@ -1,11 +1,6 @@
 {
-  "branches": [
-    "main",
-    {
-      "name": "dev",
-      "prerelease": "beta"
-    }
-  ],
+  "branches": ["main"],
+  "tagFormat": "v${version}",
   "plugins": [
     [
       "@semantic-release/commit-analyzer",
@@ -49,10 +44,7 @@
       {
         "assets": [
           {
-            "path": "artifacts/*.xpi"
-          },
-          {
-            "path": "artifacts/*.zip"
+            "path": "artifacts/*"
           }
         ]
       }

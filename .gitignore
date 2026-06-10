@@ -3,3 +3,4 @@ dist/
 *.xpi
 .env
 .DS_Store
+artifacts/

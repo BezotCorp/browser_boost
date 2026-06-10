@@ -1,8 +1,6 @@
 {
   "categories": {
-    "firefox": [
-      "productivity"
-    ]
+    "firefox": ["web-development"]
   },
   "version": {
     "license": "MIT"

@@ -1,2 +1,4 @@
+allowBuilds:
+  spawn-sync: false
 onlyBuiltDependencies:
   - spawn-sync

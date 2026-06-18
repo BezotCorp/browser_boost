@@ -177,10 +177,90 @@ function createLargeChatGptLikeDom(messageCount: number, heavy: boolean): void {
 }
 
 describe('BrowserBoost load integration', () => {
+  // IO callback exposed so tests can simulate visibility changes (e.g. restore).
+  let ioCallback: ((entries: IntersectionObserverEntry[], obs: IntersectionObserver) => void) | null = null;
+  let ioOptions: IntersectionObserverInit | undefined;
+
+  // Simule un changement de visibilité pour un élément — utilisé pour tester le restore.
+  function triggerIntersection(element: Element, isIntersecting: boolean): void {
+    ioCallback?.(
+      [
+        {
+          target: element,
+          isIntersecting,
+          boundingClientRect: element.getBoundingClientRect(),
+          intersectionRatio: isIntersecting ? 1 : 0,
+          intersectionRect: {} as DOMRectReadOnly,
+          rootBounds: null,
+          time: performance.now(),
+        } as IntersectionObserverEntry,
+      ],
+      {} as IntersectionObserver,
+    );
+  }
+
+  // Compte les éléments actuellement compactés (content-visibility:hidden).
+  function countCompacted(): number {
+    return [...document.querySelectorAll<HTMLElement>('[data-message-author-role]')].filter(
+      (el) => el.style.contentVisibility === 'hidden',
+    ).length;
+  }
+
   beforeEach(() => {
     vi.useRealTimers();
     window.localStorage.clear();
     document.body.innerHTML = '';
+    ioCallback = null;
+    ioOptions = undefined;
+
+    // IntersectionObserver — jsdom n'en a pas. Le mock calcule l'intersection
+    // via getBoundingClientRect (déjà mocké ci-dessous) et fire synchroniquement.
+    // Cela permet de vérifier la compaction sans dépendre d'un vrai layout engine.
+    (globalThis as unknown as Record<string, unknown>).IntersectionObserver = class MockIntersectionObserver {
+      constructor(
+        cb: (entries: IntersectionObserverEntry[], obs: IntersectionObserver) => void,
+        options?: IntersectionObserverInit,
+      ) {
+        ioCallback = cb;
+        ioOptions = options;
+      }
+
+      observe(element: Element): void {
+        const rect = element.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || 800;
+        const scrollY = window.scrollY || 0;
+        const marginPct = ioOptions?.rootMargin ? parseInt(ioOptions.rootMargin) / 100 : 0;
+        const buffer = viewportHeight * marginPct;
+        const absTop = rect.top + scrollY;
+        const absBottom = absTop + rect.height;
+        const isIntersecting = absBottom >= scrollY - buffer && absTop <= scrollY + viewportHeight + buffer;
+
+        ioCallback?.(
+          [
+            {
+              target: element,
+              isIntersecting,
+              boundingClientRect: rect,
+              intersectionRatio: isIntersecting ? 1 : 0,
+              intersectionRect: {} as DOMRectReadOnly,
+              rootBounds: null,
+              time: performance.now(),
+            } as IntersectionObserverEntry,
+          ],
+          this as unknown as IntersectionObserver,
+        );
+      }
+
+      unobserve(_element: Element): void {}
+      disconnect(): void {}
+    };
+
+    // ResizeObserver — no-op : les hauteurs sont fixes via getBoundingClientRect.
+    (globalThis as unknown as Record<string, unknown>).ResizeObserver = class MockResizeObserver {
+      observe(_element: Element): void {}
+      unobserve(_element: Element): void {}
+      disconnect(): void {}
+    };
 
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
@@ -238,10 +318,12 @@ describe('BrowserBoost load integration', () => {
     expect(document.querySelector('.browser-boost-toolbar')).not.toBeNull();
     expect(startupDurationMs).toBeLessThan(3000);
 
+    // Les messages hors viewport (testTop > viewportHeight + buffer = 2000px)
+    // sont compactés via content-visibility:hidden après le rAF de flushRegistration.
+    // Avec testTop = index * 100, les messages 21+ sont hors range → ~39979 compactés.
     await vi.waitFor(
       () => {
-        const placeholders = document.querySelectorAll('.browser-boost-placeholder');
-        expect(placeholders.length).toBeGreaterThanOrEqual(1000);
+        expect(countCompacted()).toBeGreaterThanOrEqual(1000);
       },
       {
         timeout: 5000,
@@ -262,10 +344,10 @@ describe('BrowserBoost load integration', () => {
     expect(document.querySelector('.browser-boost-toolbar')).not.toBeNull();
     expect(startupDurationMs).toBeLessThan(3000);
 
+    // Avec testTop = index * 900, les messages 3+ sont hors range → ~997 compactés.
     await vi.waitFor(
       () => {
-        const placeholders = document.querySelectorAll('.browser-boost-placeholder');
-        expect(placeholders.length).toBeGreaterThanOrEqual(500);
+        expect(countCompacted()).toBeGreaterThanOrEqual(500);
       },
       {
         timeout: 5000,
@@ -282,8 +364,7 @@ describe('BrowserBoost load integration', () => {
 
     await vi.waitFor(
       () => {
-        const before = document.querySelectorAll('.browser-boost-placeholder').length;
-        expect(before).toBeGreaterThan(0);
+        expect(countCompacted()).toBeGreaterThan(0);
       },
       {
         timeout: 5000,
@@ -291,16 +372,17 @@ describe('BrowserBoost load integration', () => {
       },
     );
 
-    const before = document.querySelectorAll('.browser-boost-placeholder').length;
-    const firstPlaceholder = document.querySelector<HTMLButtonElement>('.browser-boost-placeholder');
+    const before = countCompacted();
+    const target = [...document.querySelectorAll<HTMLElement>('[data-message-author-role]')].find(
+      (el) => el.style.contentVisibility === 'hidden',
+    );
 
-    if (!firstPlaceholder) {
-      throw new Error('Missing placeholder');
-    }
+    if (!target) throw new Error('No compacted message found');
 
-    firstPlaceholder.click();
+    // Simule l'IO qui signale que l'élément est devenu visible (scroll vers lui).
+    triggerIntersection(target, true);
 
-    const after = document.querySelectorAll('.browser-boost-placeholder').length;
-    expect(after).toBe(before - 1);
+    expect(countCompacted()).toBe(before - 1);
+    expect(target.style.contentVisibility).toBe('');
   });
 });

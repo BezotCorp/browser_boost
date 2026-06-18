@@ -14,7 +14,7 @@ export class ChatGptSite implements SiteAdapter {
   }
 
   findMessages(): HTMLElement[] {
-    return this.filterMessages([...document.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)]);
+    return this.dedup([...document.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)]);
   }
 
   extractMessagesFromMutation(records: MutationRecord[]): HTMLElement[] {
@@ -33,20 +33,15 @@ export class ChatGptSite implements SiteAdapter {
       }
     }
 
-    return this.filterMessages(messages);
+    return this.dedup(messages);
   }
 
-  private filterMessages(messages: HTMLElement[]): HTMLElement[] {
+  private dedup(messages: HTMLElement[]): HTMLElement[] {
     const seen = new Set<HTMLElement>();
-
-    return messages.filter((message) => {
-      if (seen.has(message)) return false;
-      seen.add(message);
-
-      if (message.dataset.browserBoostPlaceholder === 'true') return false;
-
-      const text = message.textContent?.trim() ?? '';
-      return text.length > 0;
+    return messages.filter((el) => {
+      if (seen.has(el)) return false;
+      seen.add(el);
+      return true;
     });
   }
 }

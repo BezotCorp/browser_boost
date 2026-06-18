@@ -1,7 +1,8 @@
 export type VirtualizedBlock = {
-  id: number;
-  element: HTMLElement;
-  placeholder: HTMLElement;
+  readonly id: number;
+  readonly element: HTMLElement;
   height: number;
-  detached: boolean;
+  compacted: boolean;
+  observed: boolean;
+  resizeObserver: ResizeObserver | null;
 };

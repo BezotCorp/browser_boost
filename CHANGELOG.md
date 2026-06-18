@@ -1,3 +1,11 @@
+## [1.2.0](https://github.com/Bezot-Corp/browser_boost/compare/v1.1.0...v1.2.0) (2026-06-18)
+
+### Features
+
+* collapse large code blocks via DocumentFragment ([536fbb7](https://github.com/Bezot-Corp/browser_boost/commit/536fbb708a3538414ad33b849c9eb6c3482a024b))
+* IntersectionObserver + ResizeObserver + SPA navigation ([e5b2553](https://github.com/Bezot-Corp/browser_boost/commit/e5b2553a122290e509becbece5222f480abad177))
+* replace DOM-swap virtualization with IntersectionObserver + content-visibility ([7bd19a9](https://github.com/Bezot-Corp/browser_boost/commit/7bd19a90f22a63d79431a759cc3d7814bfc8b6a3))
+
 ## [1.1.0](https://github.com/Bezot-Corp/browser_boost/compare/v1.0.0...v1.1.0) (2026-06-10)
 
 ### Features

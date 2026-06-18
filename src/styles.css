@@ -36,3 +36,27 @@
   min-width: 32px;
   text-align: center;
 }
+
+/* CodeBlockCollapser — bouton affiché sous le code tronqué */
+.browser-boost-show-more {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #888;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.browser-boost-show-more:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}

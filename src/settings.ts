@@ -2,12 +2,14 @@ export type BrowserBoostSettings = {
   enabled: boolean;
   minMessagesBeforeCompact: number;
   viewportBufferScreens: number;
+  codeBlockThresholdPx: number;
 };
 
 const DEFAULTS: BrowserBoostSettings = {
   enabled: true,
   minMessagesBeforeCompact: 10,
   viewportBufferScreens: 1.5,
+  codeBlockThresholdPx: 300,
 };
 
 const STORAGE_KEY = 'browser_boost_settings';

@@ -1,3 +1,4 @@
+import { CodeBlockCollapser } from './dom/code_block_collapser';
 import { MessageVirtualizer } from './dom/message_virtualizer';
 import { SettingsStore } from './settings';
 import type { SiteAdapter } from './sites/site_adapter';
@@ -7,6 +8,7 @@ export class BrowserBoost {
   private readonly virtualizer = new MessageVirtualizer(() => this.settingsStore.get());
   private mutationObserver: MutationObserver | null = null;
   private navObserver: MutationObserver | null = null;
+  private codeCollapser: CodeBlockCollapser | null = null;
   private initialScanDone = false;
   private toolbarUpdateRaf: number | null = null;
   private mutationRaf: number | null = null;
@@ -26,6 +28,7 @@ export class BrowserBoost {
 
     if (settings.enabled) {
       this.virtualizer.activate();
+      this.startCodeCollapser();
       this.initialScan();
     }
 
@@ -44,9 +47,9 @@ export class BrowserBoost {
     this.mutationObserver = new MutationObserver((records) => {
       if (!this.settingsStore.get().enabled) return;
 
-      // Accumule les records et les traite en un seul batch par frame —
+      // Accumule les records et traite en un seul batch par frame —
       // évite de payer le coût de extractMessagesFromMutation à chaque token
-      // streamé par ChatGPT (plusieurs mutations par seconde pendant la génération).
+      // streamé (plusieurs mutations par seconde pendant la génération).
       this.pendingRecords.push(...records);
 
       if (this.mutationRaf !== null) return;
@@ -64,9 +67,8 @@ export class BrowserBoost {
   }
 
   private observeNavigation(): void {
-    // ChatGPT est une SPA — la navigation entre conversations ne recharge pas la page.
-    // On observe le <title> comme signal de changement d'URL : c'est fiable,
-    // léger, et ne requiert pas d'intercepter history.pushState.
+    // ChatGPT est une SPA — navigation sans rechargement page.
+    // Le <title> est le signal le plus léger et fiable de changement d'URL.
     const titleTarget = document.querySelector('title') ?? document.head;
     let lastPath = location.pathname;
 
@@ -80,9 +82,9 @@ export class BrowserBoost {
   }
 
   private onNavigate(): void {
-    // Libère tous les observateurs et vide la map de blocs —
-    // les éléments de l'ancienne conversation ne sont plus dans le DOM.
     this.virtualizer.reset();
+    this.codeCollapser?.disconnect();
+    this.codeCollapser = null;
     this.initialScanDone = false;
     this.mutationObserver?.disconnect();
 
@@ -94,11 +96,24 @@ export class BrowserBoost {
 
     if (this.settingsStore.get().enabled) {
       this.virtualizer.activate();
+      this.startCodeCollapser();
       this.observeConversation();
       this.initialScan();
     }
 
     this.scheduleToolbarUpdate();
+  }
+
+  private startCodeCollapser(): void {
+    const root = this.adapter.findConversationRoot();
+    if (root === null) {
+      window.setTimeout(() => this.startCodeCollapser(), 250);
+      return;
+    }
+
+    const settings = this.settingsStore.get();
+    this.codeCollapser?.disconnect();
+    this.codeCollapser = new CodeBlockCollapser(root, settings.codeBlockThresholdPx);
   }
 
   private initialScan(): void {
@@ -112,8 +127,6 @@ export class BrowserBoost {
 
     this.initialScanDone = true;
 
-    // setTimeout 0 laisse le navigateur terminer le layout initial
-    // avant qu'on lise les getBoundingClientRect.
     window.setTimeout(() => {
       const messages = this.adapter.findMessages();
       this.virtualizer.registerMessages(messages);
@@ -128,10 +141,13 @@ export class BrowserBoost {
 
     if (next.enabled) {
       this.virtualizer.activate();
+      this.startCodeCollapser();
       this.initialScanDone = false;
       this.initialScan();
     } else {
       this.virtualizer.deactivate();
+      this.codeCollapser?.disconnect();
+      this.codeCollapser = null;
     }
 
     this.updateToolbar();
@@ -172,7 +188,6 @@ export class BrowserBoost {
     toolbar.append(status, toggle, restore);
     document.documentElement.appendChild(toolbar);
 
-    // Refs directes — plus de document.querySelector à chaque updateToolbar.
     this.statusEl = status;
     this.toggleEl = toggle;
   }

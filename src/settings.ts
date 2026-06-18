@@ -1,47 +1,42 @@
 export type BrowserBoostSettings = {
   enabled: boolean;
-  viewportBufferScreens: number;
   minMessagesBeforeCompact: number;
+  viewportBufferScreens: number;
 };
 
-const DEFAULT_SETTINGS: BrowserBoostSettings = {
+const DEFAULTS: BrowserBoostSettings = {
   enabled: true,
-  viewportBufferScreens: 2,
-  minMessagesBeforeCompact: 80,
+  minMessagesBeforeCompact: 10,
+  viewportBufferScreens: 1.5,
 };
 
-const STORAGE_KEY = 'browserBoostSettings';
+const STORAGE_KEY = 'browser_boost_settings';
 
 export class SettingsStore {
-  private settings: BrowserBoostSettings = { ...DEFAULT_SETTINGS };
+  private current: BrowserBoostSettings = { ...DEFAULTS };
 
   load(): BrowserBoostSettings {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return this.settings;
-
-      const parsed = JSON.parse(raw) as Partial<BrowserBoostSettings> & {
-        keepLastMessages?: number;
-      };
-
-      this.settings = {
-        enabled: parsed.enabled ?? DEFAULT_SETTINGS.enabled,
-        viewportBufferScreens: parsed.viewportBufferScreens ?? DEFAULT_SETTINGS.viewportBufferScreens,
-        minMessagesBeforeCompact: parsed.minMessagesBeforeCompact ?? DEFAULT_SETTINGS.minMessagesBeforeCompact,
-      };
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw !== null) {
+        this.current = { ...DEFAULTS, ...JSON.parse(raw) };
+      }
     } catch {
-      this.settings = { ...DEFAULT_SETTINGS };
+      // localStorage inaccessible ou JSON invalide — on reste sur les defaults.
     }
-
-    return this.settings;
-  }
-
-  save(settings: BrowserBoostSettings): void {
-    this.settings = settings;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    return this.current;
   }
 
   get(): BrowserBoostSettings {
-    return this.settings;
+    return this.current;
+  }
+
+  save(settings: BrowserBoostSettings): void {
+    this.current = settings;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+      // Silencieux — les settings en mémoire restent cohérents.
+    }
   }
 }

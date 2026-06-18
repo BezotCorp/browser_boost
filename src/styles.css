@@ -1,32 +1,38 @@
 .browser-boost-toolbar {
   position: fixed;
-  right: 16px;
   bottom: 16px;
+  right: 16px;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 9px;
-  border-radius: 999px;
-  background: rgba(24, 24, 27, 0.9);
-  color: white;
-  font:
-    12px system-ui,
-    sans-serif;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  background: #1a1a1a;
+  color: #e5e5e5;
+  border-radius: 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  user-select: none;
 }
 
 .browser-boost-toolbar button {
-  border: 0;
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: white;
-  color: black;
-  font: inherit;
+  padding: 3px 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e5e5e5;
+  font-size: 11px;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
 .browser-boost-toolbar button:hover {
-  filter: brightness(0.92);
+  background: #3a3a3a;
+}
+
+.browser-boost-toolbar [data-browser-boost-toggle='true'] {
+  font-weight: 600;
+  min-width: 32px;
+  text-align: center;
 }

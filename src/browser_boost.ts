@@ -5,9 +5,12 @@ import type { SiteAdapter } from './sites/site_adapter';
 export class BrowserBoost {
   private readonly settingsStore = new SettingsStore();
   private readonly virtualizer = new MessageVirtualizer(() => this.settingsStore.get());
-  private observer: MutationObserver | null = null;
+  private mutationObserver: MutationObserver | null = null;
+  private navObserver: MutationObserver | null = null;
   private initialScanDone = false;
   private toolbarUpdateRaf: number | null = null;
+  private mutationRaf: number | null = null;
+  private pendingRecords: MutationRecord[] = [];
   private statusEl: HTMLElement | null = null;
   private toggleEl: HTMLButtonElement | null = null;
 
@@ -18,7 +21,8 @@ export class BrowserBoost {
     if (!this.adapter.canRun()) return;
 
     this.injectToolbar();
-    this.observe();
+    this.observeConversation();
+    this.observeNavigation();
 
     if (settings.enabled) {
       this.virtualizer.activate();
@@ -28,26 +32,73 @@ export class BrowserBoost {
     this.updateToolbar();
   }
 
-  private observe(): void {
-    this.observer?.disconnect();
+  private observeConversation(): void {
+    this.mutationObserver?.disconnect();
 
     const root = this.adapter.findConversationRoot();
     if (root === null) {
-      window.setTimeout(() => this.observe(), 250);
+      window.setTimeout(() => this.observeConversation(), 250);
       return;
     }
 
-    this.observer = new MutationObserver((records) => {
+    this.mutationObserver = new MutationObserver((records) => {
       if (!this.settingsStore.get().enabled) return;
 
-      const messages = this.adapter.extractMessagesFromMutation(records);
-      if (messages.length === 0) return;
+      // Accumule les records et les traite en un seul batch par frame —
+      // évite de payer le coût de extractMessagesFromMutation à chaque token
+      // streamé par ChatGPT (plusieurs mutations par seconde pendant la génération).
+      this.pendingRecords.push(...records);
 
-      this.virtualizer.registerMessages(messages);
-      this.scheduleToolbarUpdate();
+      if (this.mutationRaf !== null) return;
+      this.mutationRaf = requestAnimationFrame(() => {
+        this.mutationRaf = null;
+        const toProcess = this.pendingRecords.splice(0);
+        const messages = this.adapter.extractMessagesFromMutation(toProcess);
+        if (messages.length === 0) return;
+        this.virtualizer.registerMessages(messages);
+        this.scheduleToolbarUpdate();
+      });
     });
 
-    this.observer.observe(root, { childList: true, subtree: true });
+    this.mutationObserver.observe(root, { childList: true, subtree: true });
+  }
+
+  private observeNavigation(): void {
+    // ChatGPT est une SPA — la navigation entre conversations ne recharge pas la page.
+    // On observe le <title> comme signal de changement d'URL : c'est fiable,
+    // léger, et ne requiert pas d'intercepter history.pushState.
+    const titleTarget = document.querySelector('title') ?? document.head;
+    let lastPath = location.pathname;
+
+    this.navObserver = new MutationObserver(() => {
+      if (location.pathname === lastPath) return;
+      lastPath = location.pathname;
+      this.onNavigate();
+    });
+
+    this.navObserver.observe(titleTarget, { childList: true, subtree: true });
+  }
+
+  private onNavigate(): void {
+    // Libère tous les observateurs et vide la map de blocs —
+    // les éléments de l'ancienne conversation ne sont plus dans le DOM.
+    this.virtualizer.reset();
+    this.initialScanDone = false;
+    this.mutationObserver?.disconnect();
+
+    if (this.mutationRaf !== null) {
+      cancelAnimationFrame(this.mutationRaf);
+      this.mutationRaf = null;
+    }
+    this.pendingRecords = [];
+
+    if (this.settingsStore.get().enabled) {
+      this.virtualizer.activate();
+      this.observeConversation();
+      this.initialScan();
+    }
+
+    this.scheduleToolbarUpdate();
   }
 
   private initialScan(): void {
@@ -60,6 +111,9 @@ export class BrowserBoost {
     }
 
     this.initialScanDone = true;
+
+    // setTimeout 0 laisse le navigateur terminer le layout initial
+    // avant qu'on lise les getBoundingClientRect.
     window.setTimeout(() => {
       const messages = this.adapter.findMessages();
       this.virtualizer.registerMessages(messages);
@@ -118,16 +172,18 @@ export class BrowserBoost {
     toolbar.append(status, toggle, restore);
     document.documentElement.appendChild(toolbar);
 
-    // Cacher les refs pour éviter document.querySelector à chaque updateToolbar
+    // Refs directes — plus de document.querySelector à chaque updateToolbar.
     this.statusEl = status;
     this.toggleEl = toggle;
   }
 
   private updateToolbar(): void {
     const settings = this.settingsStore.get();
+
     if (this.statusEl !== null) {
       this.statusEl.textContent = `BrowserBoost · ${this.virtualizer.countCompacted()}/${this.virtualizer.countTotal()} compacted`;
     }
+
     if (this.toggleEl !== null) {
       this.toggleEl.textContent = settings.enabled ? 'ON' : 'OFF';
     }

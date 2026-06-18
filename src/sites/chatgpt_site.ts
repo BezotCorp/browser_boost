@@ -19,16 +19,20 @@ export class ChatGptSite implements SiteAdapter {
 
   extractMessagesFromMutation(records: MutationRecord[]): HTMLElement[] {
     const messages: HTMLElement[] = [];
+
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (!(node instanceof HTMLElement)) continue;
+
         if (node.matches(MESSAGE_SELECTOR)) {
           messages.push(node);
           continue;
         }
+
         messages.push(...node.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
       }
     }
+
     return this.dedup(messages);
   }
 

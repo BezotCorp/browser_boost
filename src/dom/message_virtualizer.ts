@@ -13,6 +13,7 @@ export class MessageVirtualizer {
 
   activate(): void {
     if (this.viewportManager !== null) return;
+
     const settings = this.getSettings();
     this.viewportManager = new ViewportManager(settings.viewportBufferScreens);
 
@@ -23,18 +24,33 @@ export class MessageVirtualizer {
     }
   }
 
+  // Restaure tout et libère tous les observateurs.
+  // Appeler reset() plutôt que deactivate() lors d'une navigation SPA
+  // pour vider aussi la map de blocs.
   deactivate(): void {
     if (this.registrationRaf !== null) {
       cancelAnimationFrame(this.registrationRaf);
       this.registrationRaf = null;
     }
+
     this.pendingRegistration = [];
+
+    for (const block of this.blocks.values()) {
+      block.resizeObserver?.disconnect();
+      block.resizeObserver = null;
+      block.observed = false;
+      this.restore(block);
+    }
+
     this.viewportManager?.disconnect();
     this.viewportManager = null;
-    for (const block of this.blocks.values()) {
-      this.restore(block);
-      block.observed = false;
-    }
+  }
+
+  // Utilisé lors des navigations SPA pour repartir d'un état propre.
+  reset(): void {
+    this.deactivate();
+    this.blocks.clear();
+    this.nextId = 1;
   }
 
   registerMessages(messages: HTMLElement[]): void {
@@ -50,8 +66,6 @@ export class MessageVirtualizer {
     }
   }
 
-  // Restaure tout sans déactiver — l'IntersectionObserver re-compacte
-  // les éléments off-screen au prochain cycle async.
   restoreAll(): void {
     for (const block of this.blocks.values()) {
       this.restore(block);
@@ -76,19 +90,21 @@ export class MessageVirtualizer {
 
     const settings = this.getSettings();
 
-    // Lecture groupée des hauteurs en un seul layout pass
-    // (toutes les lectures avant toutes les écritures = pas de forced reflow)
+    // Toutes les lectures getBoundingClientRect en un seul layout pass,
+    // avant toute écriture — évite les forced reflows.
     const heights = pending.map((el) => Math.max(64, el.getBoundingClientRect().height));
 
     for (let i = 0; i < pending.length; i++) {
       const el = pending[i];
       if (this.blocks.has(el)) continue;
+
       this.blocks.set(el, {
         id: this.nextId++,
         element: el,
         height: heights[i],
         compacted: false,
         observed: false,
+        resizeObserver: null,
       });
     }
 
@@ -103,15 +119,32 @@ export class MessageVirtualizer {
   private startObserving(block: VirtualizedBlock): void {
     const vm = this.viewportManager;
     if (vm === null) return;
+
     block.observed = true;
+
+    // IntersectionObserver gère la visibilité → compact/restore natif.
     vm.observe(block.element, (visible) => {
       if (visible) this.restore(block);
       else this.compact(block);
     });
+
+    // ResizeObserver maintient la hauteur à jour pendant que l'élément
+    // est visible — évite les scroll jumps sur les blocs à contenu dynamique
+    // (code blocks qui s'expandent, images qui chargent tardivement, etc.)
+    const ro = new ResizeObserver(([entry]) => {
+      if (!block.compacted) {
+        block.height = Math.max(64, entry.contentRect.height);
+      }
+    });
+    ro.observe(block.element);
+    block.resizeObserver = ro;
   }
 
   private compact(block: VirtualizedBlock): void {
     if (block.compacted) return;
+    // height explicite préserve la scroll position.
+    // content-visibility:hidden skipe le rendu du sous-arbre entier —
+    // React ne touche pas à la structure DOM.
     block.element.style.height = `${block.height}px`;
     block.element.style.contentVisibility = 'hidden';
     block.compacted = true;

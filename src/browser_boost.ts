@@ -6,105 +6,78 @@ export class BrowserBoost {
   private readonly settingsStore = new SettingsStore();
   private readonly virtualizer = new MessageVirtualizer(() => this.settingsStore.get());
   private observer: MutationObserver | null = null;
-  private scrollListener: (() => void) | null = null;
-  private toolbar: HTMLElement | null = null;
   private initialScanDone = false;
+  private toolbarUpdateRaf: number | null = null;
+  private statusEl: HTMLElement | null = null;
+  private toggleEl: HTMLButtonElement | null = null;
 
   constructor(private readonly adapter: SiteAdapter) {}
 
   start(): void {
     const settings = this.settingsStore.load();
-
     if (!this.adapter.canRun()) return;
 
     this.injectToolbar();
-    this.updateToolbar();
-
     this.observe();
 
     if (settings.enabled) {
+      this.virtualizer.activate();
       this.initialScan();
     }
 
-    this.observeScroll();
+    this.updateToolbar();
   }
 
   private observe(): void {
     this.observer?.disconnect();
 
     const root = this.adapter.findConversationRoot();
-    if (!root) {
+    if (root === null) {
       window.setTimeout(() => this.observe(), 250);
       return;
     }
 
     this.observer = new MutationObserver((records) => {
-      const settings = this.settingsStore.get();
-      if (!settings.enabled) return;
+      if (!this.settingsStore.get().enabled) return;
 
       const messages = this.adapter.extractMessagesFromMutation(records);
       if (messages.length === 0) return;
 
       this.virtualizer.registerMessages(messages);
-      this.updateToolbar();
+      this.scheduleToolbarUpdate();
     });
 
-    this.observer.observe(root, {
-      childList: true,
-      subtree: true,
-    });
+    this.observer.observe(root, { childList: true, subtree: true });
   }
 
   private initialScan(): void {
     if (this.initialScanDone) return;
 
     const root = this.adapter.findConversationRoot();
-
-    if (!root) {
+    if (root === null) {
       window.setTimeout(() => this.initialScan(), 250);
       return;
     }
 
     this.initialScanDone = true;
-
     window.setTimeout(() => {
       const messages = this.adapter.findMessages();
       this.virtualizer.registerMessages(messages);
-      this.updateToolbar();
+      this.scheduleToolbarUpdate();
     }, 0);
-  }
-
-  private observeScroll(): void {
-    if (this.scrollListener) {
-      window.removeEventListener('scroll', this.scrollListener, { capture: true });
-    }
-
-    this.scrollListener = () => {
-      const settings = this.settingsStore.get();
-      if (!settings.enabled) return;
-
-      this.virtualizer.scheduleViewportReconcile();
-      this.updateToolbar();
-    };
-
-    window.addEventListener('scroll', this.scrollListener, {
-      passive: true,
-      capture: true,
-    });
   }
 
   private toggleEnabled(): void {
     const current = this.settingsStore.get();
     const next = { ...current, enabled: !current.enabled };
-
     this.settingsStore.save(next);
 
-    if (!next.enabled) {
-      this.virtualizer.restoreAll();
-    } else {
+    if (next.enabled) {
+      this.virtualizer.activate();
       this.initialScanDone = false;
       this.initialScan();
-      this.virtualizer.scheduleViewportReconcile();
+    } else {
+      this.virtualizer.deactivate();
     }
 
     this.updateToolbar();
@@ -115,8 +88,16 @@ export class BrowserBoost {
     this.updateToolbar();
   }
 
+  private scheduleToolbarUpdate(): void {
+    if (this.toolbarUpdateRaf !== null) return;
+    this.toolbarUpdateRaf = requestAnimationFrame(() => {
+      this.toolbarUpdateRaf = null;
+      this.updateToolbar();
+    });
+  }
+
   private injectToolbar(): void {
-    if (document.querySelector('.browser-boost-toolbar')) return;
+    if (document.querySelector('.browser-boost-toolbar') !== null) return;
 
     const toolbar = document.createElement('div');
     toolbar.className = 'browser-boost-toolbar';
@@ -131,27 +112,24 @@ export class BrowserBoost {
 
     const restore = document.createElement('button');
     restore.type = 'button';
-    restore.textContent = 'Restore';
+    restore.textContent = 'Restore All';
     restore.addEventListener('click', () => this.restoreAll());
 
     toolbar.append(status, toggle, restore);
     document.documentElement.appendChild(toolbar);
 
-    this.toolbar = toolbar;
+    // Cacher les refs pour éviter document.querySelector à chaque updateToolbar
+    this.statusEl = status;
+    this.toggleEl = toggle;
   }
 
   private updateToolbar(): void {
     const settings = this.settingsStore.get();
-
-    const status = document.querySelector<HTMLElement>('[data-browser-boost-status]');
-    const toggle = document.querySelector<HTMLButtonElement>('[data-browser-boost-toggle]');
-
-    if (status) {
-      status.textContent = `BrowserBoost · ${this.virtualizer.countDetached()}/${this.virtualizer.countTotal()} compacted`;
+    if (this.statusEl !== null) {
+      this.statusEl.textContent = `BrowserBoost · ${this.virtualizer.countCompacted()}/${this.virtualizer.countTotal()} compacted`;
     }
-
-    if (toggle) {
-      toggle.textContent = settings.enabled ? 'ON' : 'OFF';
+    if (this.toggleEl !== null) {
+      this.toggleEl.textContent = settings.enabled ? 'ON' : 'OFF';
     }
   }
 }

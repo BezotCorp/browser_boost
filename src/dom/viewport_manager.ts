@@ -1,40 +1,31 @@
-import type { BrowserBoostSettings } from '../settings';
-import type { VirtualizedBlock } from './virtualized_block';
-
-export type ViewportRange = {
-  top: number;
-  bottom: number;
-};
-
 export class ViewportManager {
-  constructor(private readonly getSettings: () => BrowserBoostSettings) {}
+  private readonly observer: IntersectionObserver;
+  private readonly callbacks = new Map<Element, (visible: boolean) => void>();
 
-  getActiveRange(): ViewportRange {
-    const settings = this.getSettings();
-    const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 800);
-    const buffer = viewportHeight * settings.viewportBufferScreens;
-    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-
-    return {
-      top: Math.max(0, scrollTop - buffer),
-      bottom: scrollTop + viewportHeight + buffer,
-    };
+  constructor(bufferScreens: number) {
+    const pct = Math.round(bufferScreens * 100);
+    this.observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          this.callbacks.get(entry.target)?.(entry.isIntersecting);
+        }
+      },
+      { rootMargin: `${pct}% 0px`, threshold: 0 },
+    );
   }
 
-  isBlockInsideActiveRange(block: VirtualizedBlock): boolean {
-    const range = this.getActiveRange();
-    const rect = this.getCurrentRect(block);
-    const top = rect.top + (window.scrollY || document.documentElement.scrollTop || 0);
-    const bottom = top + rect.height;
-
-    return bottom >= range.top && top <= range.bottom;
+  observe(element: Element, onChange: (visible: boolean) => void): void {
+    this.callbacks.set(element, onChange);
+    this.observer.observe(element);
   }
 
-  private getCurrentRect(block: VirtualizedBlock): DOMRect | { top: number; height: number } {
-    if (block.detached) {
-      return block.placeholder.getBoundingClientRect();
-    }
+  unobserve(element: Element): void {
+    this.callbacks.delete(element);
+    this.observer.unobserve(element);
+  }
 
-    return block.element.getBoundingClientRect();
+  disconnect(): void {
+    this.observer.disconnect();
+    this.callbacks.clear();
   }
 }

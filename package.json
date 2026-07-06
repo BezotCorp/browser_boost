@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
+    "dev": "pnpm build && tsc --watch",
+    "test:ext": "web-ext run --source-dir dist/",
     "lint:ext": "web-ext lint --source-dir dist",
     "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir dist --artifacts-dir artifacts --overwrite-dest",
     "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir dist --artifacts-dir artifacts --channel listed --amo-metadata metadata/amo.json --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",

@@ -4,4 +4,5 @@ export interface SiteAdapter {
   findConversationRoot(): HTMLElement | null;
   findMessages(): HTMLElement[];
   extractMessagesFromMutation(records: MutationRecord[]): HTMLElement[];
+  extractMessagesFromRemoval(records: MutationRecord[]): HTMLElement[];
 }

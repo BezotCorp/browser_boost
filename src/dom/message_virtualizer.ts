@@ -1,10 +1,12 @@
 import type { BrowserBoostSettings } from '../settings';
+import { ResizeManager } from './resize_manager';
 import { ViewportManager } from './viewport_manager';
 import type { VirtualizedBlock } from './virtualized_block';
 
 export class MessageVirtualizer {
   private readonly blocks = new Map<HTMLElement, VirtualizedBlock>();
   private viewportManager: ViewportManager | null = null;
+  private readonly resizeManager = new ResizeManager();
   private nextId = 1;
   private pendingRegistration: HTMLElement[] = [];
   private registrationRaf: number | null = null;
@@ -14,19 +16,10 @@ export class MessageVirtualizer {
   activate(): void {
     if (this.viewportManager !== null) return;
 
-    const settings = this.getSettings();
-    this.viewportManager = new ViewportManager(settings.viewportBufferScreens);
-
-    if (this.blocks.size >= settings.minMessagesBeforeCompact) {
-      for (const block of this.blocks.values()) {
-        if (!block.observed) this.startObserving(block);
-      }
-    }
+    this.viewportManager = new ViewportManager(this.getSettings().viewportBufferScreens);
+    this.observeEligibleBlocks();
   }
 
-  // Restaure tout et libère tous les observateurs.
-  // Appeler reset() plutôt que deactivate() lors d'une navigation SPA
-  // pour vider aussi la map de blocs.
   deactivate(): void {
     if (this.registrationRaf !== null) {
       cancelAnimationFrame(this.registrationRaf);
@@ -36,8 +29,7 @@ export class MessageVirtualizer {
     this.pendingRegistration = [];
 
     for (const block of this.blocks.values()) {
-      block.resizeObserver?.disconnect();
-      block.resizeObserver = null;
+      this.resizeManager.unobserve(block.element);
       block.observed = false;
       this.restore(block);
     }
@@ -46,7 +38,6 @@ export class MessageVirtualizer {
     this.viewportManager = null;
   }
 
-  // Utilisé lors des navigations SPA pour repartir d'un état propre.
   reset(): void {
     this.deactivate();
     this.blocks.clear();
@@ -63,6 +54,17 @@ export class MessageVirtualizer {
         this.registrationRaf = null;
         this.flushRegistration();
       });
+    }
+  }
+
+  unregisterMessages(messages: HTMLElement[]): void {
+    for (const el of messages) {
+      const block = this.blocks.get(el);
+      if (block === undefined) continue;
+
+      this.resizeManager.unobserve(el);
+      this.viewportManager?.unobserve(el);
+      this.blocks.delete(el);
     }
   }
 
@@ -88,10 +90,6 @@ export class MessageVirtualizer {
     const pending = this.pendingRegistration.splice(0);
     if (pending.length === 0) return;
 
-    const settings = this.getSettings();
-
-    // Toutes les lectures getBoundingClientRect en un seul layout pass,
-    // avant toute écriture — évite les forced reflows.
     const heights = pending.map((el) => Math.max(64, el.getBoundingClientRect().height));
 
     for (let i = 0; i < pending.length; i++) {
@@ -104,15 +102,23 @@ export class MessageVirtualizer {
         height: heights[i],
         compacted: false,
         observed: false,
-        resizeObserver: null,
       });
     }
 
-    const vm = this.viewportManager;
-    if (vm !== null && this.blocks.size >= settings.minMessagesBeforeCompact) {
-      for (const block of this.blocks.values()) {
-        if (!block.observed) this.startObserving(block);
-      }
+    this.observeEligibleBlocks();
+  }
+
+  // Factorisé depuis activate()/flushRegistration() — les deux répétaient
+  // "si le seuil est atteint, démarre l'observation des blocs pas encore
+  // observés". Un seul point de vérité pour cette condition.
+  private observeEligibleBlocks(): void {
+    if (this.viewportManager === null) return;
+
+    const settings = this.getSettings();
+    if (this.blocks.size < settings.minMessagesBeforeCompact) return;
+
+    for (const block of this.blocks.values()) {
+      if (!block.observed) this.startObserving(block);
     }
   }
 
@@ -122,29 +128,20 @@ export class MessageVirtualizer {
 
     block.observed = true;
 
-    // IntersectionObserver gère la visibilité → compact/restore natif.
     vm.observe(block.element, (visible) => {
       if (visible) this.restore(block);
       else this.compact(block);
     });
 
-    // ResizeObserver maintient la hauteur à jour pendant que l'élément
-    // est visible — évite les scroll jumps sur les blocs à contenu dynamique
-    // (code blocks qui s'expandent, images qui chargent tardivement, etc.)
-    const ro = new ResizeObserver(([entry]) => {
+    this.resizeManager.observe(block.element, (rect) => {
       if (!block.compacted) {
-        block.height = Math.max(64, entry.contentRect.height);
+        block.height = Math.max(64, rect.height);
       }
     });
-    ro.observe(block.element);
-    block.resizeObserver = ro;
   }
 
   private compact(block: VirtualizedBlock): void {
     if (block.compacted) return;
-    // height explicite préserve la scroll position.
-    // content-visibility:hidden skipe le rendu du sous-arbre entier —
-    // React ne touche pas à la structure DOM.
     block.element.style.height = `${block.height}px`;
     block.element.style.contentVisibility = 'hidden';
     block.compacted = true;

@@ -5,7 +5,7 @@
   "description": "BrowserBoost optimizes heavy web applications locally.",
   "type": "module",
   "scripts": {
-    "build": "tsc && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
+    "build": "esbuild src/content.ts --bundle --outfile=dist/content.js --format=iife --target=firefox142 && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
     "dev": "pnpm build && tsc --watch",
     "test:ext": "web-ext run --source-dir dist/",
     "lint:ext": "web-ext lint --source-dir dist",
@@ -19,13 +19,14 @@
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^12.0.8",
+    "@semantic-release/github": "^12.0.9",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "conventional-changelog-conventionalcommits": "^9.3.1",
+    "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
-    "semantic-release": "^25.0.3",
+    "semantic-release": "^25.0.6",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8",
-    "web-ext": "^10.3.0"
+    "vitest": "^4.1.10",
+    "web-ext": "^10.5.0"
   }
 }

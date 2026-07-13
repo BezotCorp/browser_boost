@@ -1,27 +1,26 @@
 const STABLE_DELAY_MS = 800;
-const PREVIEW_LINES = 6;
 
-type CodeBlock = {
+type CodeBlockWatch = {
   readonly pre: HTMLElement;
-  readonly code: HTMLElement;
-  readonly fragment: DocumentFragment;
   readonly resizeObserver: ResizeObserver;
-  readonly button: HTMLButtonElement;
+  fragment: DocumentFragment | null;
+  button: HTMLButtonElement | null;
   collapsed: boolean;
 };
 
 export class CodeBlockCollapser {
-  private readonly blocks = new Map<HTMLElement, CodeBlock>();
+  private readonly blocks = new Map<HTMLElement, CodeBlockWatch>();
   private readonly mutationObserver: MutationObserver;
   private scanRaf: number | null = null;
+  private pendingRecords: MutationRecord[] = [];
 
   constructor(
     private readonly root: HTMLElement,
     private readonly thresholdPx: number,
   ) {
-    this.mutationObserver = new MutationObserver(() => this.scheduleScan());
+    this.mutationObserver = new MutationObserver((records) => this.scheduleScan(records));
     this.mutationObserver.observe(root, { childList: true, subtree: true });
-    this.scheduleScan();
+    this.scheduleScan([]);
   }
 
   disconnect(): void {
@@ -30,21 +29,45 @@ export class CodeBlockCollapser {
       this.scanRaf = null;
     }
 
+    this.pendingRecords = [];
     this.mutationObserver.disconnect();
 
-    for (const block of this.blocks.values()) {
-      this.restore(block);
+    // Déconnecte TOUS les ResizeObserver enregistrés, pas seulement ceux
+    // qui ont fini par collapser — sinon les blocs jamais collapsés
+    // (petits snippets sous le seuil) fuient indéfiniment, avec une
+    // référence forte au <pre> qui empêche le GC de le libérer.
+    for (const watch of this.blocks.values()) {
+      watch.resizeObserver.disconnect();
+      if (watch.collapsed) this.restore(watch);
     }
 
     this.blocks.clear();
   }
 
-  private scheduleScan(): void {
+  private scheduleScan(records: MutationRecord[]): void {
+    this.pendingRecords.push(...records);
     if (this.scanRaf !== null) return;
     this.scanRaf = requestAnimationFrame(() => {
       this.scanRaf = null;
+      const toProcess = this.pendingRecords.splice(0);
       this.scan();
+      this.pruneRemoved(toProcess);
     });
+  }
+
+  private pruneRemoved(records: MutationRecord[]): void {
+    for (const record of records) {
+      for (const node of record.removedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        const pres = node.matches('pre') ? [node] : [...node.querySelectorAll<HTMLElement>('pre')];
+        for (const pre of pres) {
+          const watch = this.blocks.get(pre);
+          if (watch === undefined) continue;
+          watch.resizeObserver.disconnect();
+          this.blocks.delete(pre);
+        }
+      }
+    }
   }
 
   private scan(): void {
@@ -60,68 +83,61 @@ export class CodeBlockCollapser {
       if (stableTimer !== null) window.clearTimeout(stableTimer);
       if (entry.contentRect.height < this.thresholdPx) return;
 
-      // Attend la stabilisation de la hauteur — signale la fin du streaming.
       stableTimer = window.setTimeout(() => {
         stableTimer = null;
-        if (!this.blocks.has(pre)) this.collapse(pre, ro);
+        const watch = this.blocks.get(pre);
+        if (watch !== undefined && !watch.collapsed) this.collapse(watch);
       }, STABLE_DELAY_MS);
     });
 
     ro.observe(pre);
+
+    // Enregistré dès l'observation, pas seulement au collapse — c'est ça
+    // qui permet à disconnect()/pruneRemoved() de le retrouver et de le
+    // nettoyer même s'il ne dépasse jamais le seuil.
+    this.blocks.set(pre, {
+      pre,
+      resizeObserver: ro,
+      fragment: null,
+      button: null,
+      collapsed: false,
+    });
   }
 
-  private collapse(pre: HTMLElement, resizeObserver: ResizeObserver): void {
-    const code = pre.querySelector<HTMLElement>('code');
+  private collapse(watch: CodeBlockWatch): void {
+    const code = watch.pre.querySelector<HTMLElement>('code');
     if (code === null) return;
 
-    const fullText = code.textContent ?? '';
-    const lines = fullText.split('\n');
-    const lineCount = lines.length;
-
-    // Snapshot statique de la live NodeList avant de déplacer quoi que ce soit.
+    const lineCount = (code.textContent ?? '').split('\n').length;
     const nodes = [...code.childNodes];
-
-    // Déplace tous les nœuds syntaxiqués (spans, etc.) dans un DocumentFragment.
-    // Hors du DOM = zéro paint, zéro layout, zéro style recalc côté renderer.
-    // React ne voit rien : on opère sur les feuilles <code>, pas sur les
-    // containers que React reconcilie.
     const fragment = new DocumentFragment();
     fragment.append(...nodes);
-
-    // Remplace par un aperçu texte brut : un seul text node, aucun span.
-    code.textContent =
-      lines.slice(0, PREVIEW_LINES).join('\n') +
-      (lineCount > PREVIEW_LINES ? '\n…' : '');
+    code.textContent = '';
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'browser-boost-show-more';
-    button.textContent = `Show all ${lineCount} lines`;
+    button.textContent = `Afficher (${lineCount} lignes masquées)`;
+    button.addEventListener('click', () => this.restore(watch));
 
-    const block: CodeBlock = {
-      pre,
-      code,
-      fragment,
-      resizeObserver,
-      button,
-      collapsed: true,
-    };
-
-    this.blocks.set(pre, block);
-    button.addEventListener('click', () => this.restore(block));
-    pre.appendChild(button);
+    watch.fragment = fragment;
+    watch.button = button;
+    watch.collapsed = true;
+    watch.pre.appendChild(button);
   }
 
-  private restore(block: CodeBlock): void {
-    if (!block.collapsed) return;
+  private restore(watch: CodeBlockWatch): void {
+    if (!watch.collapsed || watch.fragment === null || watch.button === null) return;
 
-    // Vide le text node de preview et remet les nœuds originaux —
-    // syntax highlighting intact, aucune re-parse.
-    block.code.textContent = '';
-    block.code.append(...block.fragment.childNodes);
-    block.button.remove();
-    block.resizeObserver.disconnect();
-    block.collapsed = false;
-    this.blocks.delete(block.pre);
+    const code = watch.pre.querySelector<HTMLElement>('code');
+    if (code !== null) {
+      code.textContent = '';
+      code.append(...watch.fragment.childNodes);
+    }
+
+    watch.button.remove();
+    watch.fragment = null;
+    watch.button = null;
+    watch.collapsed = false;
   }
 }

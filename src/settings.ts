@@ -3,6 +3,7 @@ export type BrowserBoostSettings = {
   minMessagesBeforeCompact: number;
   viewportBufferScreens: number;
   codeBlockThresholdPx: number;
+  killAnimations: boolean;
 };
 
 const DEFAULTS: BrowserBoostSettings = {
@@ -10,6 +11,7 @@ const DEFAULTS: BrowserBoostSettings = {
   minMessagesBeforeCompact: 10,
   viewportBufferScreens: 1.5,
   codeBlockThresholdPx: 300,
+  killAnimations: true,
 };
 
 const STORAGE_KEY = 'browser_boost_settings';
@@ -33,10 +35,10 @@ export class SettingsStore {
     return this.current;
   }
 
-  save(settings: BrowserBoostSettings): void {
-    this.current = settings;
+  save(settings: Partial<BrowserBoostSettings>): void {
+    this.current = { ...this.current, ...settings };
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.current));
     } catch {
       // Silencieux — les settings en mémoire restent cohérents.
     }

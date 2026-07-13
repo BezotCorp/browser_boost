@@ -262,6 +262,14 @@ describe('BrowserBoost load integration', () => {
       disconnect(): void {}
     };
 
+    // getAnimations — jsdom ne l'implémente pas, comme IntersectionObserver et
+    // ResizeObserver ci-dessus. Firefox (seule cible réelle) le supporte
+    // nativement. Retourne vide : aucun message généré par ce DOM de test n'a
+    // d'animation réelle à annuler.
+    HTMLElement.prototype.getAnimations = function (): Animation[] {
+      return [];
+    };
+
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       value: 800,

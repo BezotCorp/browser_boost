@@ -4,5 +4,4 @@ export type VirtualizedBlock = {
   height: number;
   compacted: boolean;
   observed: boolean;
-  resizeObserver: ResizeObserver | null;
 };

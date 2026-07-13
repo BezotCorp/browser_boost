@@ -1,3 +1,4 @@
+import { AnimationKiller } from './dom/animation_killer';
 import { CodeBlockCollapser } from './dom/code_block_collapser';
 import { MessageVirtualizer } from './dom/message_virtualizer';
 import { SettingsStore } from './settings';
@@ -6,6 +7,7 @@ import type { SiteAdapter } from './sites/site_adapter';
 export class BrowserBoost {
   private readonly settingsStore = new SettingsStore();
   private readonly virtualizer = new MessageVirtualizer(() => this.settingsStore.get());
+  private readonly animationKiller = new AnimationKiller();
   private mutationObserver: MutationObserver | null = null;
   private navObserver: MutationObserver | null = null;
   private codeCollapser: CodeBlockCollapser | null = null;
@@ -19,56 +21,79 @@ export class BrowserBoost {
   constructor(private readonly adapter: SiteAdapter) {}
 
   start(): void {
-    const settings = this.settingsStore.load();
     if (!this.adapter.canRun()) return;
 
+    const settings = this.settingsStore.load();
+
     this.injectToolbar();
-    this.observeConversation();
-    this.observeNavigation();
+    this.waitForRoot(() => {
+      this.observeConversation();
+      this.observeNavigation();
 
-    if (settings.enabled) {
-      this.virtualizer.activate();
-      this.startCodeCollapser();
-      this.initialScan();
+      if (settings.enabled) {
+        this.virtualizer.activate();
+        this.startCodeCollapser();
+        this.initialScan();
+      }
+
+      this.updateToolbar();
+    });
+  }
+
+  private waitForRoot(onReady: (root: HTMLElement) => void): void {
+    const root = this.adapter.findConversationRoot();
+    if (root === null) {
+      window.setTimeout(() => this.waitForRoot(onReady), 250);
+      return;
     }
-
-    this.updateToolbar();
+    onReady(root);
   }
 
   private observeConversation(): void {
     this.mutationObserver?.disconnect();
 
-    const root = this.adapter.findConversationRoot();
-    if (root === null) {
-      window.setTimeout(() => this.observeConversation(), 250);
-      return;
-    }
+    this.waitForRoot((root) => {
+      this.mutationObserver = new MutationObserver((records) => {
+        if (!this.settingsStore.get().enabled) return;
 
-    this.mutationObserver = new MutationObserver((records) => {
-      if (!this.settingsStore.get().enabled) return;
+        this.pendingRecords.push(...records);
 
-      // Accumule les records et traite en un seul batch par frame —
-      // évite de payer le coût de extractMessagesFromMutation à chaque token
-      // streamé (plusieurs mutations par seconde pendant la génération).
-      this.pendingRecords.push(...records);
+        if (this.mutationRaf !== null) return;
+        this.mutationRaf = requestAnimationFrame(() => {
+          this.mutationRaf = null;
+          const toProcess = this.pendingRecords.splice(0);
+          const settings = this.settingsStore.get();
 
-      if (this.mutationRaf !== null) return;
-      this.mutationRaf = requestAnimationFrame(() => {
-        this.mutationRaf = null;
-        const toProcess = this.pendingRecords.splice(0);
-        const messages = this.adapter.extractMessagesFromMutation(toProcess);
-        if (messages.length === 0) return;
-        this.virtualizer.registerMessages(messages);
-        this.scheduleToolbarUpdate();
+          const messages = this.adapter.extractMessagesFromMutation(toProcess);
+          if (messages.length > 0) {
+            this.virtualizer.registerMessages(messages);
+
+            // Scoped aux éléments qui viennent de changer, pas à la
+            // conversation entière — sinon le coût du scan grandit avec
+            // la taille de la conversation, exactement ce qu'on corrige.
+            if (settings.killAnimations) {
+              for (const el of messages) {
+                this.animationKiller.scan(el);
+              }
+            }
+          }
+
+          const removed = this.adapter.extractMessagesFromRemoval(toProcess);
+          if (removed.length > 0) {
+            this.virtualizer.unregisterMessages(removed);
+          }
+
+          if (messages.length > 0 || removed.length > 0) {
+            this.scheduleToolbarUpdate();
+          }
+        });
       });
-    });
 
-    this.mutationObserver.observe(root, { childList: true, subtree: true });
+      this.mutationObserver.observe(root, { childList: true, subtree: true });
+    });
   }
 
   private observeNavigation(): void {
-    // ChatGPT est une SPA — navigation sans rechargement page.
-    // Le <title> est le signal le plus léger et fiable de changement d'URL.
     const titleTarget = document.querySelector('title') ?? document.head;
     let lastPath = location.pathname;
 
@@ -105,41 +130,41 @@ export class BrowserBoost {
   }
 
   private startCodeCollapser(): void {
-    const root = this.adapter.findConversationRoot();
-    if (root === null) {
-      window.setTimeout(() => this.startCodeCollapser(), 250);
-      return;
-    }
-
-    const settings = this.settingsStore.get();
-    this.codeCollapser?.disconnect();
-    this.codeCollapser = new CodeBlockCollapser(root, settings.codeBlockThresholdPx);
+    this.waitForRoot((root) => {
+      const settings = this.settingsStore.get();
+      this.codeCollapser?.disconnect();
+      this.codeCollapser = new CodeBlockCollapser(root, settings.codeBlockThresholdPx);
+    });
   }
 
   private initialScan(): void {
     if (this.initialScanDone) return;
 
-    const root = this.adapter.findConversationRoot();
-    if (root === null) {
-      window.setTimeout(() => this.initialScan(), 250);
-      return;
-    }
+    this.waitForRoot(() => {
+      this.initialScanDone = true;
 
-    this.initialScanDone = true;
+      window.setTimeout(() => {
+        const messages = this.adapter.findMessages();
+        this.virtualizer.registerMessages(messages);
 
-    window.setTimeout(() => {
-      const messages = this.adapter.findMessages();
-      this.virtualizer.registerMessages(messages);
-      this.scheduleToolbarUpdate();
-    }, 0);
+        // Couvre le cas d'activation en cours de génération : un indicateur
+        // "thinking" déjà en boucle au moment où l'extension démarre.
+        if (this.settingsStore.get().killAnimations) {
+          for (const el of messages) {
+            this.animationKiller.scan(el);
+          }
+        }
+
+        this.scheduleToolbarUpdate();
+      }, 0);
+    });
   }
 
   private toggleEnabled(): void {
     const current = this.settingsStore.get();
-    const next = { ...current, enabled: !current.enabled };
-    this.settingsStore.save(next);
+    this.settingsStore.save({ enabled: !current.enabled });
 
-    if (next.enabled) {
+    if (this.settingsStore.get().enabled) {
       this.virtualizer.activate();
       this.startCodeCollapser();
       this.initialScanDone = false;
@@ -155,6 +180,11 @@ export class BrowserBoost {
 
   private restoreAll(): void {
     this.virtualizer.restoreAll();
+    this.codeCollapser?.disconnect();
+    this.codeCollapser = null;
+    if (this.settingsStore.get().enabled) {
+      this.startCodeCollapser();
+    }
     this.updateToolbar();
   }
 

@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/BezotCorp/browser_boost/compare/v1.2.0...v1.3.0) (2026-07-13)
+
+### Features
+
+* cut infinite CSS animations and unregister removed messages ([1aeadd2](https://github.com/BezotCorp/browser_boost/commit/1aeadd2e1c56aa7b9f721f4a8a474d1d5ffcaddb))
+
 ## [1.2.0](https://github.com/Bezot-Corp/browser_boost/compare/v1.1.0...v1.2.0) (2026-06-18)
 
 ### Features

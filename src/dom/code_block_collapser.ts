@@ -44,6 +44,22 @@ export class CodeBlockCollapser {
     this.blocks.clear();
   }
 
+  // Appelé quand GenerationWatcher signale la fin de génération — force
+  // le collapse immédiat des blocs encore au-dessus du seuil, sans attendre
+  // STABLE_DELAY_MS. Le timer par-ResizeObserver reste en fallback si jamais
+  // ce signal externe ne se déclenche pas (site changé, bouton introuvable).
+  forceStabilizeAll(): void {
+    for (const pre of this.root.querySelectorAll<HTMLElement>('pre')) {
+      const watch = this.blocks.get(pre);
+      if (watch === undefined || watch.collapsed) continue;
+
+      const height = pre.getBoundingClientRect().height;
+      if (height >= this.thresholdPx) {
+        this.collapse(watch);
+      }
+    }
+  }
+
   private scheduleScan(records: MutationRecord[]): void {
     this.pendingRecords.push(...records);
     if (this.scanRaf !== null) return;

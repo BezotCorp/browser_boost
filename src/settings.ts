@@ -4,6 +4,7 @@ export type BrowserBoostSettings = {
   viewportBufferScreens: number;
   codeBlockThresholdPx: number;
   killAnimations: boolean;
+  heavyMessageCharThreshold: number;
 };
 
 const DEFAULTS: BrowserBoostSettings = {
@@ -12,6 +13,7 @@ const DEFAULTS: BrowserBoostSettings = {
   viewportBufferScreens: 1.5,
   codeBlockThresholdPx: 300,
   killAnimations: true,
+  heavyMessageCharThreshold: 20000,
 };
 
 const STORAGE_KEY = 'browser_boost_settings';

@@ -1,12 +1,11 @@
 {
+  "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2022",
     "lib": ["DOM", "ES2022"],
     "strict": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "entrypoints/**/*.ts", ".wxt/wxt.d.ts"]
 }

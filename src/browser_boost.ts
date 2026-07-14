@@ -3,6 +3,9 @@ import { CodeBlockCollapser } from './dom/code_block_collapser';
 import { MessageVirtualizer } from './dom/message_virtualizer';
 import { SettingsStore } from './settings';
 import type { SiteAdapter } from './sites/site_adapter';
+import { GenerationWatcher } from './dom/generation_watcher';
+
+const HEALTH_CHECK_INTERVAL_MS = 2000;
 
 export class BrowserBoost {
   private readonly settingsStore = new SettingsStore();
@@ -12,11 +15,11 @@ export class BrowserBoost {
   private navObserver: MutationObserver | null = null;
   private codeCollapser: CodeBlockCollapser | null = null;
   private initialScanDone = false;
-  private toolbarUpdateRaf: number | null = null;
   private mutationRaf: number | null = null;
   private pendingRecords: MutationRecord[] = [];
-  private statusEl: HTMLElement | null = null;
-  private toggleEl: HTMLButtonElement | null = null;
+  private observedRoot: HTMLElement | null = null;
+  private healthCheckInterval: number | null = null;
+  private readonly generationWatcher = new GenerationWatcher();
 
   constructor(private readonly adapter: SiteAdapter) {}
 
@@ -25,18 +28,21 @@ export class BrowserBoost {
 
     const settings = this.settingsStore.load();
 
-    this.injectToolbar();
     this.waitForRoot(() => {
       this.observeConversation();
       this.observeNavigation();
+      this.startHealthCheck();
+      this.generationWatcher.watch((isGenerating) => {
+        if (!isGenerating) {
+          this.codeCollapser?.forceStabilizeAll();
+        }
+      });
 
       if (settings.enabled) {
         this.virtualizer.activate();
         this.startCodeCollapser();
         this.initialScan();
       }
-
-      this.updateToolbar();
     });
   }
 
@@ -49,10 +55,27 @@ export class BrowserBoost {
     onReady(root);
   }
 
+  // ChatGPT peut remonter entièrement sa page sans changement d'URL —
+  // observeNavigation() (basé sur location.pathname) ne détecte pas ce cas.
+  // Ce check périodique et léger (document.contains, quasi gratuit) vérifie
+  // que le root qu'on observe est toujours réellement dans le document ;
+  // sinon, tout est réinitialisé comme pour une vraie navigation.
+  private startHealthCheck(): void {
+    if (this.healthCheckInterval !== null) return;
+
+    this.healthCheckInterval = window.setInterval(() => {
+      if (this.observedRoot !== null && !document.contains(this.observedRoot)) {
+        this.onNavigate();
+      }
+    }, HEALTH_CHECK_INTERVAL_MS);
+  }
+
   private observeConversation(): void {
     this.mutationObserver?.disconnect();
 
     this.waitForRoot((root) => {
+      this.observedRoot = root;
+
       this.mutationObserver = new MutationObserver((records) => {
         if (!this.settingsStore.get().enabled) return;
 
@@ -68,9 +91,6 @@ export class BrowserBoost {
           if (messages.length > 0) {
             this.virtualizer.registerMessages(messages);
 
-            // Scoped aux éléments qui viennent de changer, pas à la
-            // conversation entière — sinon le coût du scan grandit avec
-            // la taille de la conversation, exactement ce qu'on corrige.
             if (settings.killAnimations) {
               for (const el of messages) {
                 this.animationKiller.scan(el);
@@ -81,10 +101,6 @@ export class BrowserBoost {
           const removed = this.adapter.extractMessagesFromRemoval(toProcess);
           if (removed.length > 0) {
             this.virtualizer.unregisterMessages(removed);
-          }
-
-          if (messages.length > 0 || removed.length > 0) {
-            this.scheduleToolbarUpdate();
           }
         });
       });
@@ -112,6 +128,7 @@ export class BrowserBoost {
     this.codeCollapser = null;
     this.initialScanDone = false;
     this.mutationObserver?.disconnect();
+    this.observedRoot = null;
 
     if (this.mutationRaf !== null) {
       cancelAnimationFrame(this.mutationRaf);
@@ -125,8 +142,6 @@ export class BrowserBoost {
       this.observeConversation();
       this.initialScan();
     }
-
-    this.scheduleToolbarUpdate();
   }
 
   private startCodeCollapser(): void {
@@ -147,90 +162,12 @@ export class BrowserBoost {
         const messages = this.adapter.findMessages();
         this.virtualizer.registerMessages(messages);
 
-        // Couvre le cas d'activation en cours de génération : un indicateur
-        // "thinking" déjà en boucle au moment où l'extension démarre.
         if (this.settingsStore.get().killAnimations) {
           for (const el of messages) {
             this.animationKiller.scan(el);
           }
         }
-
-        this.scheduleToolbarUpdate();
       }, 0);
     });
-  }
-
-  private toggleEnabled(): void {
-    const current = this.settingsStore.get();
-    this.settingsStore.save({ enabled: !current.enabled });
-
-    if (this.settingsStore.get().enabled) {
-      this.virtualizer.activate();
-      this.startCodeCollapser();
-      this.initialScanDone = false;
-      this.initialScan();
-    } else {
-      this.virtualizer.deactivate();
-      this.codeCollapser?.disconnect();
-      this.codeCollapser = null;
-    }
-
-    this.updateToolbar();
-  }
-
-  private restoreAll(): void {
-    this.virtualizer.restoreAll();
-    this.codeCollapser?.disconnect();
-    this.codeCollapser = null;
-    if (this.settingsStore.get().enabled) {
-      this.startCodeCollapser();
-    }
-    this.updateToolbar();
-  }
-
-  private scheduleToolbarUpdate(): void {
-    if (this.toolbarUpdateRaf !== null) return;
-    this.toolbarUpdateRaf = requestAnimationFrame(() => {
-      this.toolbarUpdateRaf = null;
-      this.updateToolbar();
-    });
-  }
-
-  private injectToolbar(): void {
-    if (document.querySelector('.browser-boost-toolbar') !== null) return;
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'browser-boost-toolbar';
-
-    const status = document.createElement('span');
-    status.dataset.browserBoostStatus = 'true';
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.dataset.browserBoostToggle = 'true';
-    toggle.addEventListener('click', () => this.toggleEnabled());
-
-    const restore = document.createElement('button');
-    restore.type = 'button';
-    restore.textContent = 'Restore All';
-    restore.addEventListener('click', () => this.restoreAll());
-
-    toolbar.append(status, toggle, restore);
-    document.documentElement.appendChild(toolbar);
-
-    this.statusEl = status;
-    this.toggleEl = toggle;
-  }
-
-  private updateToolbar(): void {
-    const settings = this.settingsStore.get();
-
-    if (this.statusEl !== null) {
-      this.statusEl.textContent = `BrowserBoost · ${this.virtualizer.countCompacted()}/${this.virtualizer.countTotal()} compacted`;
-    }
-
-    if (this.toggleEl !== null) {
-      this.toggleEl.textContent = settings.enabled ? 'ON' : 'OFF';
-    }
   }
 }

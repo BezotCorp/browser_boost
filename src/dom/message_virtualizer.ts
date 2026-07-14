@@ -74,18 +74,6 @@ export class MessageVirtualizer {
     }
   }
 
-  countCompacted(): number {
-    let n = 0;
-    for (const block of this.blocks.values()) {
-      if (block.compacted) n++;
-    }
-    return n;
-  }
-
-  countTotal(): number {
-    return this.blocks.size;
-  }
-
   private flushRegistration(): void {
     const pending = this.pendingRegistration.splice(0);
     if (pending.length === 0) return;
@@ -108,17 +96,24 @@ export class MessageVirtualizer {
     this.observeEligibleBlocks();
   }
 
-  // Factorisé depuis activate()/flushRegistration() — les deux répétaient
-  // "si le seuil est atteint, démarre l'observation des blocs pas encore
-  // observés". Un seul point de vérité pour cette condition.
+  // Un message est compacté soit parce que le groupe entier a dépassé
+  // minMessagesBeforeCompact, soit parce qu'il est individuellement très
+  // lourd (heavyMessageCharThreshold) — un seul message énorme dans une
+  // petite conversation ne doit pas attendre les autres pour être allégé.
   private observeEligibleBlocks(): void {
     if (this.viewportManager === null) return;
 
     const settings = this.getSettings();
-    if (this.blocks.size < settings.minMessagesBeforeCompact) return;
+    const groupThresholdReached = this.blocks.size >= settings.minMessagesBeforeCompact;
 
     for (const block of this.blocks.values()) {
-      if (!block.observed) this.startObserving(block);
+      if (block.observed) continue;
+
+      const isHeavy = (block.element.textContent?.length ?? 0) > settings.heavyMessageCharThreshold;
+
+      if (groupThresholdReached || isHeavy) {
+        this.startObserving(block);
+      }
     }
   }
 

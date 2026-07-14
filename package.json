@@ -5,12 +5,13 @@
   "description": "BrowserBoost optimizes heavy web applications locally.",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/content.ts --bundle --outfile=dist/content.js --format=iife --target=firefox142 && mkdir -p dist && cp src/styles.css dist/styles.css && cp manifest.json dist/manifest.json",
-    "dev": "pnpm build && tsc --watch",
-    "test:ext": "web-ext run --source-dir dist/",
-    "lint:ext": "web-ext lint --source-dir dist",
-    "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir dist --artifacts-dir artifacts --overwrite-dest",
-    "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir dist --artifacts-dir artifacts --channel listed --amo-metadata metadata/amo.json --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
+    "build": "wxt build -b firefox",
+    "dev": "wxt -b firefox",
+    "compile": "tsc --noEmit",
+    "test:ext": "web-ext run --source-dir .output/firefox-mv3",
+    "lint:ext": "web-ext lint --source-dir .output/firefox-mv3",
+    "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir .output/firefox-mv3 --artifacts-dir artifacts --overwrite-dest",
+    "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir .output/firefox-mv3 --artifacts-dir artifacts --channel listed --amo-metadata metadata/amo.json --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
     "release": "semantic-release",
     "test:integration": "vitest run tests/integration"
   },
@@ -22,11 +23,11 @@
     "@semantic-release/github": "^12.0.9",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "conventional-changelog-conventionalcommits": "^9.3.1",
-    "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "semantic-release": "^25.0.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
-    "web-ext": "^10.5.0"
+    "web-ext": "^10.5.0",
+    "wxt": "^0.20.27"
   }
 }

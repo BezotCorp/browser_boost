@@ -20,12 +20,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  ci-checks:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,14 +42,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build extension
-        run: pnpm build
-
-      - name: Lint extension
-        run: pnpm lint:ext
-
-      - name: Run integration tests
-        run: pnpm test:integration
+      - name: Run all checks
+        run: pnpm check
 
       - name: Pack extension
         run: pnpm pack:xpi

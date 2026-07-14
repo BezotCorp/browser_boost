@@ -32,22 +32,6 @@
         "assets": ["package.json", "CHANGELOG.md"],
         "message": "chore: ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
-    ],
-    [
-      "@semantic-release/exec",
-      {
-        "publishCmd": "pnpm release:firefox"
-      }
-    ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": [
-          {
-            "path": "artifacts/*"
-          }
-        ]
-      }
     ]
   ]
 }

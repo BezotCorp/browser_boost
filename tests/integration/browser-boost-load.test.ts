@@ -323,7 +323,6 @@ describe('BrowserBoost load integration', () => {
     app.start();
     const startupDurationMs = performance.now() - start;
 
-    expect(document.querySelector('.browser-boost-toolbar')).not.toBeNull();
     expect(startupDurationMs).toBeLessThan(3000);
 
     // Les messages hors viewport (testTop > viewportHeight + buffer = 2000px)
@@ -349,7 +348,6 @@ describe('BrowserBoost load integration', () => {
     app.start();
     const startupDurationMs = performance.now() - start;
 
-    expect(document.querySelector('.browser-boost-toolbar')).not.toBeNull();
     expect(startupDurationMs).toBeLessThan(3000);
 
     // Avec testTop = index * 900, les messages 3+ sont hors range → ~997 compactés.

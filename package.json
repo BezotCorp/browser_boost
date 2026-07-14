@@ -5,15 +5,19 @@
   "description": "BrowserBoost optimizes heavy web applications locally.",
   "type": "module",
   "scripts": {
-    "build": "wxt build -b firefox",
-    "dev": "wxt -b firefox",
-    "compile": "tsc --noEmit",
-    "test:ext": "web-ext run --source-dir .output/firefox-mv3",
+    "check": "pnpm typecheck && pnpm build:firefox && pnpm lint:ext && pnpm test:integration",
+    "pack:xpi": "rm -rf artifacts && pnpm build:firefox && web-ext build --source-dir .output/firefox-mv3 --artifacts-dir artifacts --overwrite-dest",
+    "release:firefox": "rm -rf artifacts && pnpm build:firefox && pnpm lint:ext && web-ext sign --source-dir .output/firefox-mv3 --artifacts-dir artifacts --channel listed --amo-metadata metadata/amo.json --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
+
+    "typecheck": "tsc --noEmit",
+    "build:firefox": "wxt build -b firefox",
     "lint:ext": "web-ext lint --source-dir .output/firefox-mv3",
-    "pack:xpi": "rm -rf artifacts && pnpm build && web-ext build --source-dir .output/firefox-mv3 --artifacts-dir artifacts --overwrite-dest",
-    "release:firefox": "rm -rf artifacts && pnpm build && pnpm lint:ext && web-ext sign --source-dir .output/firefox-mv3 --artifacts-dir artifacts --channel listed --amo-metadata metadata/amo.json --api-key \"$AMO_JWT_ISSUER\" --api-secret \"$AMO_JWT_SECRET\"",
+    "test:integration": "vitest run tests/integration",
+    "dev": "wxt -b firefox",
+    "test:ext": "web-ext run --source-dir .output/firefox-mv3",
     "release": "semantic-release",
-    "test:integration": "vitest run tests/integration"
+
+    "postinstall": "wxt prepare"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",

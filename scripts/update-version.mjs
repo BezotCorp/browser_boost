@@ -19,7 +19,3 @@ function updateJson(path, updater) {
 updateJson('package.json', (json) => {
   json.version = version;
 });
-
-updateJson('manifest.json', (json) => {
-  json.version = version;
-});

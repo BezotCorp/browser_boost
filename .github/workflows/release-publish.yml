@@ -10,31 +10,12 @@ on:
 
 jobs:
   publish:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Check what Release Prepublish Check reported
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          REPO="${{ github.repository }}"
-
-          JOB_ID=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --jq '.jobs[0].id')
-
-          CUSTOM_MESSAGE=$(gh api "repos/$REPO/check-runs/$JOB_ID/annotations" \
-            --jq '[.[] | select(.message != "Process completed with exit code 1.")][0].message // ""')
-
-          echo "conclusion=${{ github.event.workflow_run.conclusion }}" >> "$GITHUB_OUTPUT"
-          echo "message=$CUSTOM_MESSAGE" >> "$GITHUB_OUTPUT"
-
-          echo "Release Prepublish Check conclusion: ${{ github.event.workflow_run.conclusion }}"
-          echo "Release Prepublish Check message: $CUSTOM_MESSAGE"
-
       - name: Generate release bot token
-        if: steps.check.outputs.conclusion == 'success'
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -42,7 +23,6 @@ jobs:
           private-key: ${{ secrets.BEZOTCORP_RELEASE_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
-        if: steps.check.outputs.conclusion == 'success'
         uses: actions/checkout@v4
         with:
           ref: main
@@ -50,32 +30,22 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup pnpm
-        if: steps.check.outputs.conclusion == 'success'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
       - name: Setup Node.js
-        if: steps.check.outputs.conclusion == 'success'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.check.outputs.conclusion == 'success'
         run: pnpm install --frozen-lockfile
 
       - name: Publish to AMO and create GitHub release
-        if: steps.check.outputs.conclusion == 'success'
         run: ./scripts/publish-firefox.sh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-
-      - name: Report why nothing was published
-        if: steps.check.outputs.conclusion != 'success'
-        run: |
-          echo "::notice::Release Prepublish Check did not succeed — reason: ${{ steps.check.outputs.message }}"
-          echo "Nothing to publish."

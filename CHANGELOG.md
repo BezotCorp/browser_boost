@@ -1,3 +1,13 @@
+## [1.4.0](https://github.com/BezotCorp/browser_boost/compare/v1.3.0...v1.4.0) (2026-07-14)
+
+### Features
+
+* migrate to WXT and add DOM safety/performance mechanisms ([c5530ec](https://github.com/BezotCorp/browser_boost/commit/c5530ec8c1dd7850e381b2dee332ea0eb4ea5e83))
+
+### Bug Fixes
+
+* bundle content script with esbuild instead of raw tsc output ([a9fa313](https://github.com/BezotCorp/browser_boost/commit/a9fa3134d9d830473f80575328b99c16974dfa0f))
+
 ## [1.3.0](https://github.com/BezotCorp/browser_boost/compare/v1.2.0...v1.3.0) (2026-07-13)
 
 ### Features

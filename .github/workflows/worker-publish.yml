@@ -1,16 +1,14 @@
-name: Release Publish
+name: Worker Publish
 
 on:
-  workflow_run:
-    workflows: ["Release Prepublish Check"]
-    types:
-      - completed
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
 
 jobs:
   publish:
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -44,8 +42,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish to AMO and create GitHub release
-        run: ./scripts/publish-firefox.sh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: ./scripts/publish-firefox.sh

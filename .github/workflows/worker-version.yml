@@ -1,0 +1,86 @@
+name: Worker Version
+
+on:
+  workflow_call:
+    outputs:
+      has_new_version:
+        description: "Whether semantic-release found a new version to release"
+        value: ${{ jobs.bump.outputs.has_new_version }}
+      new_version:
+        description: "The new version number, if any"
+        value: ${{ jobs.bump.outputs.new_version }}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      has_new_version: ${{ steps.run.outputs.has_new_version }}
+      new_version: ${{ steps.run.outputs.new_version }}
+    steps:
+      - name: Generate release bot token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BEZOTCORP_RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.BEZOTCORP_RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "bezotcorp-release-bot[bot]"
+          git config user.email "bezotcorp-release-bot[bot]@users.noreply.github.com"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create release branch from main
+        run: ./scripts/create-branch.sh release/pending main
+
+      - name: Checkout release branch
+        run: |
+          git fetch origin release/pending
+          git checkout release/pending
+
+      - name: Run semantic-release (bump only)
+        id: run
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if ./scripts/run-semantic-release-version.sh; then
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "has_new_version=true" >> "$GITHUB_OUTPUT"
+            echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_new_version=false" >> "$GITHUB_OUTPUT"
+            echo "new_version=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR into main and wait for merge
+        if: steps.run.outputs.has_new_version == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          ./scripts/open-and-wait-pr-merge.sh \
+            release/pending main \
+            "Release version bump" \
+            "chore: release version bump"

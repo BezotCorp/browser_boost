@@ -1,28 +1,25 @@
-name: Prepare sync main into dev
+name: Worker Sync
 
 on:
-  workflow_run:
-    workflows: ["Release Version"]
-    types:
-      - completed
-    branches:
-      - main
-
-permissions:
-  contents: read
-  pull-requests: write
+  workflow_call:
 
 jobs:
-  prepare-sync:
+  sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
       - name: Generate bot token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Sync main into dev
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

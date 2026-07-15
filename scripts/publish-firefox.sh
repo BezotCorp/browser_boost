@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION=$(node -p "require('./package.json').version")
+if [ -n "${RELEASE_VERSION:-}" ]; then
+  VERSION="$RELEASE_VERSION"
+else
+  VERSION=$(node -p "require('./package.json').version")
+fi
 
 echo "Publishing version $VERSION to AMO..."
 

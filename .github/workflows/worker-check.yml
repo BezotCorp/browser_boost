@@ -1,0 +1,70 @@
+name: Worker Check
+
+on:
+  workflow_call:
+    outputs:
+      has_new_version:
+        description: "Whether semantic-release would produce a new version"
+        value: ${{ jobs.check.outputs.has_new_version }}
+      current_version:
+        description: "The version currently in package.json"
+        value: ${{ jobs.check.outputs.current_version }}
+      current_version_published:
+        description: "Whether current_version already has a GitHub release"
+        value: ${{ jobs.check.outputs.current_version_published }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_new_version: ${{ steps.check.outputs.has_new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+      current_version_published: ${{ steps.check.outputs.current_version_published }}
+    steps:
+      - name: Generate release bot token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BEZOTCORP_RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.BEZOTCORP_RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for a new version and publication status
+        id: check
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+          if gh release view "v${CURRENT_VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "current_version_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current_version_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if npx semantic-release --dry-run 2>&1 | tee /tmp/dry-run.log | grep -q "no new version is released"; then
+            echo "has_new_version=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_new_version=true" >> "$GITHUB_OUTPUT"
+          fi

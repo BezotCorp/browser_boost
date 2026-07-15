@@ -1,0 +1,43 @@
+name: Main Orchestrator
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: main-orchestrator-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    uses: ./.github/workflows/worker-check.yml
+    secrets: inherit
+
+  version:
+    needs: check
+    if: needs.check.outputs.has_new_version == 'true'
+    uses: ./.github/workflows/worker-version.yml
+    secrets: inherit
+
+  sync-only:
+    needs: [check, version]
+    if: always() && needs.check.outputs.has_new_version == 'false' && needs.check.outputs.current_version_published == 'true'
+    uses: ./.github/workflows/worker-sync.yml
+    secrets: inherit
+
+  publish-existing:
+    needs: check
+    if: needs.check.outputs.has_new_version == 'false' && needs.check.outputs.current_version_published == 'false'
+    uses: ./.github/workflows/worker-publish.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.check.outputs.current_version }}
+
+  publish-new:
+    needs: version
+    if: needs.version.outputs.has_new_version == 'true'
+    uses: ./.github/workflows/worker-publish.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.version.outputs.new_version }}
